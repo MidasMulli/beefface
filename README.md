@@ -1,22 +1,43 @@
 # BEEFFACE
 
-Reverse engineering the Apple Neural Engine on M5 silicon.
+Apple's compiled ANE binary format (Zin), reverse engineered.
 
-Direct compilation and execution of arbitrary programs on ANE hardware via private `_ANEInMemoryModel` API, bypassing CoreML entirely. Hardware execution proven via precision fingerprinting — the ANE's fixed-function approximations for transcendentals produce bit-level different results from IEEE 754 computation.
+Magic bytes: `0xBEEFFACE`. Apple's joke on Mach-O's `0xFEEDFACE`.
+
+## Prior art
+
+This work builds on:
+
+- [**mdaiter/ane**](https://github.com/mdaiter/ane) (Jan 2026) — Reverse engineered the ANE stack: `_ANEClient`, `_ANEModel`, Espresso layer types, XPC flow to `aned`. First to identify the `0xBEEFFACE` magic and HWX binary format.
+- [**maderix/ANE**](https://github.com/maderix/ANE) (Feb 2026) — Training on ANE via `_ANEInMemoryModelDescriptor` and MIL compilation. Forward + backward pass, IOSurface I/O, dynamic weight kernels, INT8 quantization. The definitive work on direct ANE compute access.
+- [**eiln/ane**](https://github.com/eiln/ane) (Dec 2022) — Reverse engineered Linux kernel driver for ANE.
+
+The private API execution path (`_ANEClient`, `_ANEInMemoryModel`, IOSurface I/O) is established prior art. This repo does not claim firsts there.
+
+## What this adds
+
+**Zin binary format spec** — Complete byte-level documentation of the compiled ANE program format: Mach-O header, 11 load commands, segment layout (`__PAGEZERO`, `__FVMLIB` const/data, `__TEXT`), section cross-references, thread state descriptors, symbol table. CPU type 128, H17G subtype 9. First published specification of the container internals. See [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md).
+
+**17-stage hardware pipeline** — The ANE is not a processor. It's a fixed-function pipeline with 17 named stages: `dma_conv_input`, `dequant1`, `irelu1`, `itranspose1`, `broadcast1`, `scaled_ew`, `post_process`, `postscale`, `abs_or_zero_compare`, `reduction`, `final_scale`, `post_process`, `orelu`, `ogoc`, `postogo`, `postogocrelu`, `otranspose`, `oquant`. Operations are implemented by enabling/disabling stages (0x09=active, 0x00=off, 0xFF=bypass). See [`docs/PROGMEM_OP_DIFF.md`](docs/PROGMEM_OP_DIFF.md).
+
+**HWX byte map** — Word-by-word comparison of compiled binaries reveals the opcode encoding: Word[19] at file offset `0x404C` selects the operation (relu=`0x9361`, abs=`0x9541`). Word[12] controls stage enable flags. Word[4] encodes program size. Only 6 functional bytes differ between operations of the same shape. See [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md).
+
+**ZinBuilder** — Parse, patch, and rebuild valid BEEFFACE binaries. Verified: patching relu→abs in a cached `.hwx` changes ANE hardware output. CPU falls back to the source model while ANE executes the patched binary. The binary controls the hardware. See [`src/zin_builder.py`](src/zin_builder.py).
+
+**Hardware LUT fingerprint** — The ANE computes tanh and sigmoid via fixed-function hardware approximations that produce bit-level different results from IEEE 754 fp16 computation. The Midas Fingerprint (`tanh(x) * sigmoid(x)`) compounds this deviation into a deterministic hardware signature. 33/44 values diverge across |x| < 1, up to 11 ULP. Exact matches at +-0.5, +-1.0 suggest LUT knot points. Deterministic 100/100 runs. CPU ground truth verified via `math.tanh`, `numpy.tanh`, and `mpmath.tanh` (50-digit precision) — all three agree. See [`MIDAS_FINGERPRINT.md`](MIDAS_FINGERPRINT.md).
+
+**Espresso vocabulary** — 41 layer types, 50+ elementwise operations, 22+ activation modes mapped including undocumented modes (6=x+1, 13=clamp_min, 14=constant, 25=SiLU, 26=HardSwish) not surfaced by coremltools. See [`docs/ESPRESSO_VOCABULARY.md`](docs/ESPRESSO_VOCABULARY.md).
 
 ## The Midas Fingerprint
 
-A hardware fingerprint function that runs only on Apple Neural Engine:
-
 ```
 Computation: output = tanh(x) * sigmoid(x)
-Pathway:     Hand-written MIL -> _ANEInMemoryModel -> ANE hardware
 ```
 
-The ANE implements tanh and sigmoid via fixed-function hardware approximations. Their product compounds the deviation into a deterministic fingerprint no CPU can reproduce.
+ANE hardware approximations for tanh and sigmoid differ from IEEE 754. Their product compounds the deviation. The result is a deterministic fingerprint of ANE hardware execution.
 
 ```
-Nick L — March 24, 2026 — signed by Apple Neural Engine
+Nick L — March 24, 2026
 
        ord       x          ANE          CPU   ANE_hex  CPU_hex  ULP
   N     78  0.6143     0.354004     0.354980      35aa     35ae    4
@@ -33,43 +54,23 @@ Nick L — March 24, 2026 — signed by Apple Neural Engine
   8/8 divergent from CPU. Deterministic 100/100.
 ```
 
-**Kill test results:**
-- ANE differs from CPU: **True** (33/44 values in extended sweep, up to 11 ULP)
-- Deterministic 100/100: **True**
-- Public CoreML API matches ANE: **False** (CoreML routes to CPU)
-- CPU ground truth verified via `math.tanh`, `numpy.tanh`, `mpmath.tanh` (50-digit precision) — all agree
+## Repository structure
 
-## What's here
-
-### Proof
-
-- [`MIDAS_FINGERPRINT.md`](MIDAS_FINGERPRINT.md) — Full evidence document with fingerprint table, compilation pathway, and kill test results
-- [`src/midas_fingerprint.py`](src/midas_fingerprint.py) — The kill test script (requires entitled binary + SIP off)
-
-### ANE Reverse Engineering
-
-- [`docs/ANE_CRACK_REPORT.md`](docs/ANE_CRACK_REPORT.md) — Complete reverse engineering report: binary patching, Zin format, pipeline architecture
-- [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md) — Byte-level specification of the BEEFFACE Zin binary format
-- [`docs/ESPRESSO_VOCABULARY.md`](docs/ESPRESSO_VOCABULARY.md) — Full map of espresso.net layer types, activation modes, elementwise operations
-- [`docs/PROGMEM_OP_DIFF.md`](docs/PROGMEM_OP_DIFF.md) — Program memory analysis: 17-stage pipeline, stage names, kernel tile structure
-- [`docs/ANE_5_0_EVIDENCE.md`](docs/ANE_5_0_EVIDENCE.md) — Precision fingerprinting methodology and evidence
-
-### Tools
-
-- [`src/zin_builder.py`](src/zin_builder.py) — Parse, modify, and rebuild BEEFFACE Zin binaries
-- [`src/hwx_format.py`](src/hwx_format.py) — HWX binary format parser with opcode identification and patching
-- [`src/mil_leaky_relu_kill.py`](src/mil_leaky_relu_kill.py) — MIL compilation proof: leaky relu, clip, custom ops on ANE
-- [`src/mil_kill_test2.py`](src/mil_kill_test2.py) — IOSurface I/O format discovery (PlaneStride=64 fix)
-
-## Key findings
-
-**The ANE is not a processor. It's a configurable fixed-function pipeline with 17 hardware stages.** There is no ISA. Operations are implemented by enabling/disabling pipeline stages and configuring their parameters.
-
-**Zin binary format (BEEFFACE):** Mach-O-like container with magic `0xBEEFFACE`, CPU type 128 (ANE), H17G subtype 9. Contains load commands, thread state descriptors, and two executable sections: `__TEXT.__text` (kernel tile descriptors) and `__TEXT.__const` (pipeline configuration).
-
-**Execution pathway:** Hand-written MIL text is compiled via `_ANEInMemoryModelDescriptor` (private API in `AppleNeuralEngine.framework`). The ANE compiler service generates a Zin binary. The binary is loaded into the ANE hardware program table (`programHandle != 0`). I/O occurs via IOSurfaces with data at `PlaneStride`-byte offsets per channel.
-
-**Hardware execution proof:** The ANE's tanh and sigmoid implementations produce deterministic bit-level deviations from IEEE 754 fp16 computation. The pattern is consistent with fixed-function hardware approximation: largest errors near zero (high curvature region), exact agreement at saturation. Verified against ground truth computed via three independent methods.
+```
+├── MIDAS_FINGERPRINT.md        # Hardware fingerprint evidence
+├── src/
+│   ├── midas_fingerprint.py    # Fingerprint kill test
+│   ├── zin_builder.py          # BEEFFACE binary parser/patcher
+│   ├── hwx_format.py           # HWX format analysis tools
+│   ├── mil_leaky_relu_kill.py  # MIL compilation proofs
+│   └── mil_kill_test2.py       # IOSurface I/O format discovery
+└── docs/
+    ├── HWX_BYTE_MAP.md         # Zin binary format specification
+    ├── PROGMEM_OP_DIFF.md      # 17-stage pipeline analysis
+    ├── ESPRESSO_VOCABULARY.md   # Activation/elementwise mode map
+    ├── ANE_CRACK_REPORT.md     # Full reverse engineering report
+    └── ANE_5_0_EVIDENCE.md     # Precision fingerprinting method
+```
 
 ## Requirements
 
