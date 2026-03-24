@@ -174,7 +174,7 @@ Target: M5 Pro week (64GB, 70B models, deeper reverse engineering capacity)
 ## Reproduction Steps
 
 ```bash
-# 1. Requires SIP off and amfi_get_out_of_my_way=1
+# 1. Requires SIP and AMFI disabled
 
 # 2. Build and compile a relu model via coremltools
 python3 -c "

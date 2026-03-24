@@ -74,7 +74,7 @@ Nick L — March 24, 2026 — signed by Apple Neural Engine
 ## Requirements
 
 - Apple Silicon Mac (tested on M5)
-- macOS with SIP disabled and AMFI disabled (`amfi_get_out_of_my_way=1`)
+- macOS with SIP and AMFI disabled (security research configuration)
 - Python binary signed with `com.apple.ane.iokit-user-access` entitlement
 - `coremltools`, `numpy`, `pyobjc`
 
@@ -83,6 +83,10 @@ Nick L — March 24, 2026 — signed by Apple Neural Engine
 - MacBook Air M5, 16 GB, macOS 26.3.1
 - ANE: H17G, 12.19 TFLOPS FP16
 - Zin compiler: v9.202.0
+
+## Legal
+
+This project constitutes security research and interoperability analysis under DMCA Section 1201(f) and (j). All work was performed on hardware owned by the researcher for the purpose of understanding the Apple Neural Engine's computation model and achieving interoperability with the ANE hardware interface. No proprietary source code was accessed. All findings are derived from black-box observation of compiler inputs and outputs, binary format analysis, and public framework interfaces.
 
 ## License
 

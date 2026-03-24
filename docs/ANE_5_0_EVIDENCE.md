@@ -2,8 +2,8 @@
 
 **Date:** 2026-03-24 09:33 CDT
 **Platform:** macOS 26.3.1 (25D771280a), MacBook Air M5, 16GB
-**Python:** ~/.mlx-env/bin/runner2 (signed with com.apple.ane.iokit-user-access)
-**System state:** SIP OFF, AMFI OFF (amfi_get_out_of_my_way=1)
+**Python:** Python signed with com.apple.ane.iokit-user-access entitlement
+**System state:** SIP disabled, AMFI disabled
 
 ---
 

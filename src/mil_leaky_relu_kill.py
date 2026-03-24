@@ -10,7 +10,7 @@ Kill test: [-2, -1, 0, 1, 2] -> [-0.2, -0.1, 0, 1, 2]
 This operation executed via hand-written MIL compiled in-memory
 on ANE hardware. No public CoreML API produces this binary.
 
-Run with: ~/.mlx-env/bin/runner2 mil_leaky_relu_kill.py
+Run with: python3  # requires ANE entitlement mil_leaky_relu_kill.py
 """
 import objc
 import os

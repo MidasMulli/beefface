@@ -5,7 +5,7 @@ MIL Kill Test v2: Fixed I/O format.
 Model attributes say: Type=Float32, BatchStride=4096, PlaneStride=64, Channels=64
 So we need fp32 data at 64-byte stride offsets in a 4096-byte IOSurface.
 
-Run with: ~/.mlx-env/bin/runner2 mil_kill_test2.py
+Run with: python3  # requires ANE entitlement mil_kill_test2.py
 """
 import objc
 import os
