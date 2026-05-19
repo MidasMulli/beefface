@@ -14,6 +14,15 @@ This work builds on:
 
 The private API execution path (`_ANEClient`, `_ANEInMemoryModel`, IOSurface I/O) is established prior art. This repo does not claim firsts there.
 
+## Related work
+
+The Asahi Linux community has built complementary ANE infrastructure on Linux:
+
+- [allbilly/ane](https://github.com/allbilly/ane): H13 ANE ops via pure Python register programming on Asahi Linux
+- [eiln/ane](https://github.com/eiln/ane): Linux kernel driver for the ANE
+- [tinygrad's accel/ane](https://github.com/tinygrad/tinygrad/tree/v0.10.3/extra/accel/ane/): original H13 reverse engineering
+- [Maynard Handley's vol7 ANE](https://github.com/name99-org/AArch64-Explore/blob/main/vol7%20ANE.nb.pdf): architectural analysis
+
 ## What this adds
 
 **Zin binary format spec** — Complete byte-level documentation of the compiled ANE program format: Mach-O header, 11 load commands, segment layout (`__PAGEZERO`, `__FVMLIB` const/data, `__TEXT`), section cross-references, thread state descriptors, symbol table. CPU type 128, H17G subtype 9. First published specification of the container internals. See [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md).
