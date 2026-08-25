@@ -25,7 +25,7 @@ The Asahi Linux community has built complementary ANE infrastructure on Linux:
 
 ## What this adds
 
-**Zin binary format spec** - Complete byte-level documentation of the compiled ANE program format: Mach-O header, 11 load commands, segment layout (`__PAGEZERO`, `__FVMLIB` const/data, `__TEXT`), section cross-references, thread state descriptors, symbol table. CPU type 128, H17G subtype 9. First published specification of the container internals. See [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md).
+**Zin binary format spec** - Complete byte-level documentation of the compiled ANE program format: Mach-O header, 11 load commands, segment layout (`__PAGEZERO`, `__FVMLIB` const/data, `__TEXT`), section cross-references, thread state descriptors, symbol table. CPU type 128, H17G subtype 9. The container-layer byte map here goes further than the adjacent public work we know (tinygrad's tooling and eiln's notes cover the instruction stream and parts of the header; neither documents the full load-command/section container layout) -- scoped to that comparison, not asserted as a first. See [`docs/HWX_BYTE_MAP.md`](docs/HWX_BYTE_MAP.md).
 
 **17-stage hardware pipeline** - The ANE is not a processor. It's a fixed-function pipeline with 17 named stages: `dma_conv_input`, `dequant1`, `irelu1`, `itranspose1`, `broadcast1`, `scaled_ew`, `post_process`, `postscale`, `abs_or_zero_compare`, `reduction`, `final_scale`, `post_process`, `orelu`, `ogoc`, `postogo`, `postogocrelu`, `otranspose`, `oquant`. Operations are implemented by enabling/disabling stages (0x09=active, 0x00=off, 0xFF=bypass). See [`docs/PROGMEM_OP_DIFF.md`](docs/PROGMEM_OP_DIFF.md).
 
