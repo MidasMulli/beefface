@@ -35,6 +35,10 @@ The Asahi Linux community has built complementary ANE infrastructure on Linux:
 
 **Hardware LUT fingerprint** - The ANE computes tanh and sigmoid via fixed-function hardware approximations that produce bit-level different results from IEEE 754 fp16 computation. The Midas Fingerprint (`tanh(x) * sigmoid(x)`) compounds this deviation into a deterministic hardware signature. 33/44 values diverge across |x| < 1, up to 11 ULP. Exact matches at +-0.5, +-1.0 suggest LUT knot points. Deterministic 100/100 runs. CPU ground truth verified via `math.tanh`, `numpy.tanh`, and `mpmath.tanh` (50-digit precision) - all three agree. See [`MIDAS_FINGERPRINT.md`](MIDAS_FINGERPRINT.md).
 
+**Engine classes and the layer opcode table** - ANECompiler names its layer classes with an engine prefix: `ZinNE*` (conv, matmul, pool, elementwise, bypass), `ZinPE*` (elementwise, pool, GOC, secure flush) and `ZinSNE*` (condition, GOC). GOC layers exist per engine, and a pass named `ZinMirGOCEngineReassignment` moves GOC work between them. `ZinIrEnumToStringUtil::OpCodeToString` resolves a layer opcode through a flat 8-byte-per-entry pointer table with no bounds check, bounded at roughly 126 entries by the adjacent non-linear-mode table. Also documents the `mac_cfg` word at task-descriptor offset `[0x4b8]` and its five setters. Compiler `ZinAneCompiler-9.509.0`. See [`docs/ZIN_ENGINE_CLASSES.md`](docs/ZIN_ENGINE_CLASSES.md).
+
+**Reduction accumulator precision, measured** - A single-op `reduce_sum` over 4096 FP16 inputs returns `266,207,232` and `4095.0009765625`, both bit-exact against FP32. The second requires 22 significand bits, which excludes FP16, bf16 and a 19-bit float, and is a property of the returned value rather than of the summation order. Scoped to the reduction path: the conv accumulator is not measurable this way, because the output narrows at `oquant` before it can be read. See [`docs/ACCUMULATOR_PRECISION.md`](docs/ACCUMULATOR_PRECISION.md).
+
 **Espresso vocabulary** - 41 layer types, 50+ elementwise operations, 22+ activation modes mapped including undocumented modes (6=x+1, 13=clamp_min, 14=constant, 25=SiLU, 26=HardSwish) not surfaced by coremltools. See [`docs/ESPRESSO_VOCABULARY.md`](docs/ESPRESSO_VOCABULARY.md).
 
 ## The Midas Fingerprint
@@ -77,6 +81,8 @@ Nick L - March 24, 2026
     ├── HWX_BYTE_MAP.md         # Zin binary format specification
     ├── PROGMEM_OP_DIFF.md      # 17-stage pipeline analysis
     ├── ESPRESSO_VOCABULARY.md   # Activation/elementwise mode map
+    ├── ZIN_ENGINE_CLASSES.md   # NE/PE/SNE classes, opcode table, mac_cfg
+    ├── ACCUMULATOR_PRECISION.md # Measured reduction accumulator width
     ├── ANE_CRACK_REPORT.md     # Full reverse engineering report
     └── ANE_5_0_EVIDENCE.md     # Precision fingerprinting method
 ```
