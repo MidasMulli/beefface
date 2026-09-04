@@ -126,3 +126,102 @@ emits and would parse it, not a firmware dump.
 Static compiler analysis says what the compiler emits and how it names things. It does not
 establish hardware behaviour. Where a hardware claim is wanted, see `ACCUMULATOR_PRECISION.md` for
 a measured example, and `ANE_CRACK_REPORT.md` for the patch-and-toggle method.
+
+---
+
+## 4. Machine patterns: `ZinNEPatterns`
+
+Compiler `ZinAneCompiler-10.26.6` (macOS 27.0, 26A5421a). Extracted from the shared cache; note
+this is a newer build than the 9.509.0 used for sections 1 to 3 above.
+
+`ZinNEPatterns` holds the post-lowering fusion patterns. Present: `Conv`, `NEConv`, `UConv`,
+`Pool`, `UPool`, `Bypass`, `MatMul`, `ElementWise`, `UnaryElementWise`, `DualSourceElementWise`,
+`CrossCorrelation`, `KernelRasterizer`, `RCAS`, `MxQuant`, `MxDeQuant`, `UMaxWithConst`,
+`TdBranching`.
+
+Two entry points carry the logic:
+
+| function | address |
+|---|---|
+| `ZinNEPatterns::Conv::AnalyzeConv(ZinIrOpLayerGraph*, ZinIrParameters&, ZinPattern*)` | `0x20bd51e78` |
+| `ZinNEPatterns::Conv::Fuse(...)` | `0x20bd52688` |
+| `ZinNEPatterns::Conv::ToActivation(ZinElementWiseLayer*)` | `0x20bd52f10` |
+| `ZinNEPatterns::NEConv::Fuse(...)` | `0x20bd635c4` |
+
+### What the NEConv pattern references
+
+Resolving the adrp/add string references inside `NEConv::Fuse` gives its vocabulary directly:
+
+```
+_encap
+dma_conv_input
+dma_conv_output
+ane_layer
+condition_layer
+Mult has more than 2 inputs
+Unsupported operand type in td branching fusion.
+```
+
+Two things follow.
+
+`dma_conv_input` and `dma_conv_output` are the **first and last stages of the 17-stage pipeline**
+documented in `ANE_CRACK_REPORT.md`. The pattern's DMA-symbol condition is a check on those symbol
+names, so the pattern legality is tied to the pipeline's own input and output stages rather than to
+an abstract layout predicate.
+
+`ane_layer`, `condition_layer` and the `td branching fusion` error string all appear in this same
+function, so **task-descriptor branching fusion is performed inside `NEConv::Fuse`**, not in a
+separate pass. That connects the `TdBranching` pattern to the conv path, and the condition object
+side of it is `ZinSNEConditionOperation` / `ZinSNEConditionLayer` (section 1), with `SNE_COND`
+(`0x7c`) and `TM_BRANCH` (`0x74`) in the opcode enum (`LAYER_OPCODES.md`).
+
+---
+
+## 5. The kernel-size splitter cost function
+
+`ZinMirKernelSizeSplitterEngine` scores candidate splits. The scoring functions:
+
+| function | address |
+|---|---|
+| `Run()` | `0x20bab7490` |
+| `GetUtilizationFor(ZinIrLayerSplitInfo::Part const&, ...)` | `0x20bab77e8` |
+| `GetUtilizationFor(ZinIrLayerSplitInfo const&, ...)` | `0x20bab78ac` |
+| `GetTotalPassCount(ZinIrLayerSplitInfo const&, ...)` | `0x20bab7940` |
+| `GetOCGFactor(ZinNEConvLayer const*)` | `0x20bab79d8` |
+| `PartitionLinearly(...)` | `0x20bab7ca4` |
+| `DeterminePartition(ZinNEConvLayer const*, ..., Analysis const&, ZinIrLayerSplitInfo&)` | `0x20bab83e8` |
+| `DetermineSplittingUsingCompression(...)` | `0x20bab9820` |
+| `DetermineSplittingForPerChannelPaletteLUT(...)` | `0x20bab992c` |
+
+`GetUtilizationFor` is a work-weighted mean utilization, and contains no constants:
+
+```
+ucvtf s0, x22          ; part work
+ucvtf s1, x0
+fdiv  s1, s0, s1       ; part / capacity
+ldr   x8, [x20]        ; total
+ucvtf s2, x8
+fdiv  s0, s0, s2       ; part / total
+fmadd s8, s0, s1, s8   ; acc += (part/total) * (part/capacity)
+```
+
+`GetTotalPassCount` walks the parts array at stride `0x480`, gated on a byte flag at part offset
+`+0x470` (the same flag `GetUtilizationFor` reads), accumulating a per-part pass count.
+
+So the two cost terms are **utilization and total pass count**, both computed from shapes. Neither
+function carries a threshold immediate; the selection among legal splits happens in
+`DeterminePartition`, with `PartitionLinearly` generating candidates under an `OCGSizeRange` and a
+`ZinIrLayerSplitInfo::Part::Constraints`.
+
+### Hardware parameters
+
+Per-target parameters come from a `ZinIrHal*::GetParams()` family returning `ZinIrHalParameters`,
+consumed by `L2Request(WorkUnitShape const&, ...)`. 28 targets are present:
+
+```
+H11 H12 H13 H13g H14 H14c H14g H15 H15c H15g H16 H16c H16g H16s
+H17 H17a H17c H17g H17s H18  M9 M11  T0 T1  U1 U2 U3 U4
+```
+
+maderix reports pulling a 2360-byte hardware abstraction table from `ZinIrHalH16g::GetParams()` on
+M4. `H17g` is the M5 Pro analogue in the same family, and `H18` is present in this build.
