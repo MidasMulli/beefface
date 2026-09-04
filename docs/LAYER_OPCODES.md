@@ -42,11 +42,46 @@ a group of convs fed by a concat, matching the function name. The two derivation
 
 ## Build sensitivity
 
-The ordering is not stable across builds. maderix ("Inside the M4 ANE", part 4b) reports `0x5d`
-for the conv layer and `0x64` for the bypass layer on M4. This build has `NEFUSED_CONV` at `0x60`
-and `NEFUSED_BYPASS` at `0x68`, shifts of +3 and +4. Because the two deltas differ, ops were
-inserted at more than one point: three before conv, and one more between conv and bypass. An
-opcode value from one build must be re-read on another, not carried across.
+The ordering is not stable across builds, and the shift is now mapped exactly.
+
+macOS 27 inserted five opcodes relative to the macOS 26.5 (25F84) numbering. Each insertion shifts
+everything above it by one:
+
+| inserted at (this build) | name |
+|---|---|
+| `0x2e` | `RMS_NORM` |
+| `0x5a` | `REDUCE_SCATTER` |
+| `0x5b` | `ATOMIC_READ_MODIFY_WRITE` |
+| `0x67` | `NEFUSED_UNARY_EW` |
+| `0x81` | `CLEARING_TASK` |
+
+Worked anchors across the two builds:
+
+| class | 25F84 | this build |
+|---|---|---|
+| `ZinConcatLayer` | `0x07` | `0x07` (below every insertion, unchanged) |
+| `ZinPixelShuffleLayer` | `0x32` | `0x33` |
+| `ZinConditionLayer` | `0x4e` | `0x4f` |
+| `ZinNEConvLayer` | `0x5d` | `0x60` |
+| `ZinNEBypassLayer` | `0x64` | `0x68` |
+
+maderix ("Inside the M4 ANE", part 4b) reports `0x5d` for the conv layer and `0x64` for the bypass
+layer. Those match the 25F84 column exactly, which pins that table to the pre-27 numbering. Read in
+that column, **`0x32` is `ZinPixelShuffleLayer`**.
+
+⛔ The trap this creates is worth stating plainly: in 25F84 numbering `0x60` is `ZinNEMatMulLayer`,
+while in this build `0x60` is the conv layer. A value carried across builds without re-reading
+lands on the wrong class while still looking plausible. Never quote a Zin opcode without its build.
+
+### Two independent derivations
+
+This table was read from the `OpCodeToString` name table. The same values were separately recovered
+by scanning per-class constructor immediates: every layer and info class calls
+`ZinIrOpLayerOpCode::ZinIrOpLayerOpCode(ZinIrOpLayerOpCodeType)` with a literal in `w1`, so tracking
+the most recent `mov w1, #imm` before each `bl` to that constructor yields the value per class. That
+method also works on the 25F84 dump, where the name table is not reachable, which is how the
+cross-build alignment above was established. The two methods agree on every anchor and on all five
+insertions.
 
 ## Table
 
