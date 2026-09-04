@@ -86,8 +86,9 @@ Reading `table[n]` and dereferencing gives the name for opcode `n`. Externally r
 values that can be used to validate such a read are `0x5d` for the conv layer and `0x64` for the
 bypass layer (maderix, part 4b).
 
-We have not published the table contents. Extracting them requires reading the data page from a
-shared cache image rather than from a `__text` disassembly.
+The table contents are decoded in [`LAYER_OPCODES.md`](LAYER_OPCODES.md): 131 opcodes, `0x00 CONV`
+through `0x82 INVALID`. Reading them requires the data page from a shared-cache image rather than a
+`__text` disassembly, and the entries are chained fixups rather than raw pointers.
 
 ---
 
